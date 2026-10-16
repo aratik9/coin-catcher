@@ -1,0 +1,261 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coin Catcher - Arcade Game</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px;
+    font-family: system-ui, sans-serif;
+    text-align: center; color: #fff;
+    background: linear-gradient(#101b43, #263b70);
+    min-height: 100vh;
+  }
+  h1 { margin: 8px 0; color: #ffdf69; }
+  p { margin: 8px; }
+  .stats {
+    display: flex; justify-content: center;
+    gap: 24px; font-weight: bold; margin: 14px;
+  }
+  canvas {
+    display: block; width: 100%;
+    max-width: 480px; height: auto;
+    margin: 14px auto; border: 3px solid #fff;
+    border-radius: 14px; background: #92ddff;
+    touch-action: none;
+  }
+  button {
+    padding: 12px 24px; margin: 5px;
+    border: 0; border-radius: 10px;
+    background: #ffcf42; color: #17213d;
+    font-size: 17px; font-weight: bold;
+    cursor: pointer;
+  }
+  .hint { color: #dbe7ff; font-size: 14px; }
+</style>
+</head>
+<body>
+<h1>🪙 Coin Catcher</h1>
+<p>Catch coins. Avoid bombs. Beat your high score!</p>
+
+<div class="stats">
+  <span>Score: <span id="score">0</span></span>
+  <span>Lives: <span id="lives">3</span></span>
+  <span>Best: <span id="best">0</span></span>
+</div>
+
+<canvas id="game" width="480" height="560"></canvas>
+<button id="start">Start Game</button>
+<p class="hint">Move with ← →, A/D, or drag your basket.</p>
+<p class="hint">Gold coins = +10 points · Bombs = lose a life</p>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const scoreEl = document.getElementById("score");
+const livesEl = document.getElementById("lives");
+const bestEl = document.getElementById("best");
+const startBtn = document.getElementById("start");
+
+let basket, items, score, lives, running, lastTime, spawnTime;
+let keys = {};
+let best = 0;
+
+try {
+  best = Number(localStorage.getItem("coinCatcherBest")) || 0;
+} catch (e) {}
+bestEl.textContent = best;
+
+function reset() {
+  basket = { x: 205, y: 505, w: 70, h: 24, speed: 330 };
+  items = [];
+  score = 0;
+  lives = 3;
+  lastTime = 0;
+  spawnTime = 0;
+  running = true;
+  scoreEl.textContent = score;
+  livesEl.textContent = lives;
+  startBtn.textContent = "Restart Game";
+  requestAnimationFrame(loop);
+}
+
+function spawnItem() {
+  const bomb = Math.random() < 0.23;
+  items.push({
+    x: 18 + Math.random() * (canvas.width - 36),
+    y: -20,
+    r: bomb ? 14 : 12,
+    speed: 120 + Math.random() * 100 + score * 0.7,
+    bomb
+  });
+}
+
+function drawBackground() {
+  const sky = ctx.createLinearGradient(0, 0, 0, 560);
+  sky.addColorStop(0, "#74d5ff");
+  sky.addColorStop(1, "#e2f8ff");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, 480, 560);
+
+  ctx.fillStyle = "#fff";
+  [[65,90],[300,140],[400,65]].forEach(([x,y]) => {
+    ctx.beginPath();
+    ctx.arc(x,y,20,0,Math.PI*2);
+    ctx.arc(x+22,y-8,25,0,Math.PI*2);
+    ctx.arc(x+44,y,18,0,Math.PI*2);
+    ctx.fill();
+  });
+
+  ctx.fillStyle = "#8bd66b";
+  ctx.fillRect(0, 535, 480, 25);
+}
+
+function drawBasket() {
+  ctx.fillStyle = "#a85b2a";
+  ctx.beginPath();
+  ctx.roundRect(basket.x, basket.y, basket.w, basket.h, 6);
+  ctx.fill();
+  ctx.strokeStyle = "#743b20";
+  ctx.lineWidth = 4;
+  ctx.stroke();
+
+  ctx.strokeStyle = "#ffcf82";
+  ctx.lineWidth = 3;
+  for (let i = 1; i < 5; i++) {
+    ctx.beginPath();
+    ctx.moveTo(basket.x + i * 14, basket.y + 3);
+    ctx.lineTo(basket.x + i * 14, basket.y + 21);
+    ctx.stroke();
+  }
+}
+
+function drawItem(item) {
+  ctx.beginPath();
+  ctx.arc(item.x, item.y, item.r, 0, Math.PI * 2);
+  ctx.fillStyle = item.bomb ? "#303448" : "#ffbd22";
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = item.bomb ? "#141829" : "#f18b00";
+  ctx.stroke();
+
+  ctx.fillStyle = item.bomb ? "#fff" : "#fff4a5";
+  ctx.font = "bold 17px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(item.bomb ? "!" : "$", item.x, item.y);
+}
+
+function endGame() {
+  running = false;
+  startBtn.textContent = "Play Again";
+  if (score > best) {
+    best = score;
+    bestEl.textContent = best;
+    try {
+      localStorage.setItem("coinCatcherBest", best);
+    } catch (e) {}
+  }
+  drawBackground();
+  items.forEach(drawItem);
+  drawBasket();
+
+  ctx.fillStyle = "rgba(15,25,55,0.82)";
+  ctx.fillRect(35, 190, 410, 155);
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.font = "bold 34px sans-serif";
+  ctx.fillText("Game Over!", 240, 240);
+  ctx.font = "22px sans-serif";
+  ctx.fillText("Your score: " + score, 240, 282);
+  ctx.font = "16px sans-serif";
+  ctx.fillText("Press Play Again to try once more", 240, 318);
+}
+
+function loop(time) {
+  if (!running) return;
+  const dt = Math.min((time - (lastTime || time)) / 1000, 0.04);
+  lastTime = time;
+  spawnTime += dt;
+
+  if (spawnTime > Math.max(0.32, 0.85 - score / 500)) {
+    spawnItem();
+    spawnTime = 0;
+  }
+
+  if (keys.ArrowLeft || keys.a) basket.x -= basket.speed * dt;
+  if (keys.ArrowRight || keys.d) basket.x += basket.speed * dt;
+  basket.x = Math.max(0, Math.min(480 - basket.w, basket.x));
+
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    item.y += item.speed * dt;
+
+    const caught =
+      item.y + item.r >= basket.y &&
+      item.y - item.r <= basket.y + basket.h &&
+      item.x >= basket.x - item.r &&
+      item.x <= basket.x + basket.w + item.r;
+
+    if (caught) {
+      if (item.bomb) {
+        lives--;
+        livesEl.textContent = lives;
+      } else {
+        score += 10;
+        scoreEl.textContent = score;
+      }
+      items.splice(i, 1);
+      if (lives <= 0) {
+        endGame();
+        return;
+      }
+    } else if (item.y - item.r > 560) {
+      items.splice(i, 1);
+    }
+  }
+
+  drawBackground();
+  items.forEach(drawItem);
+  drawBasket();
+  requestAnimationFrame(loop);
+}
+
+document.addEventListener("keydown", e => {
+  if (["ArrowLeft","ArrowRight"," "].includes(e.key)) e.preventDefault();
+  keys[e.key] = true;
+  keys[e.key.toLowerCase()] = true;
+});
+document.addEventListener("keyup", e => {
+  keys[e.key] = false;
+  keys[e.key.toLowerCase()] = false;
+});
+
+function moveBasket(e) {
+  if (!running) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * canvas.width / rect.width;
+  basket.x = Math.max(0, Math.min(480 - basket.w, x - basket.w / 2));
+}
+canvas.addEventListener("pointerdown", e => {
+  canvas.setPointerCapture(e.pointerId);
+  moveBasket(e);
+});
+canvas.addEventListener("pointermove", e => {
+  if (e.buttons || e.pointerType === "touch") moveBasket(e);
+});
+
+startBtn.addEventListener("click", reset);
+drawBackground();
+ctx.fillStyle = "#173455";
+ctx.textAlign = "center";
+ctx.font = "bold 25px sans-serif";
+ctx.fillText("Ready to catch coins?", 240, 265);
+ctx.font = "18px sans-serif";
+ctx.fillText("Press Start Game!", 240, 305);
+</script>
+</body>
+</html>
